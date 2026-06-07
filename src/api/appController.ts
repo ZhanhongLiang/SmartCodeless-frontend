@@ -148,6 +148,45 @@ export async function listBuildLogs(
 }
 
 /** 此处后端没有提供注释 GET /app/download/${param0} */
+export async function startSandboxPreview(
+  body: API.SandboxStartRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseSandboxStatusResponse>('/app/sandbox/start', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+export async function getSandboxStatus(
+  params: API.getSandboxStatusParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseSandboxStatusResponse>('/app/sandbox/status', {
+    method: 'GET',
+    params: { ...params },
+    ...(options || {}),
+  })
+}
+
+export async function stopSandboxPreview(
+  body: API.SandboxStopRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseSandboxStatusResponse>('/app/sandbox/stop', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 export async function listAppVersions(
   params: API.listAppVersionsParams,
   options?: { [key: string]: any }

@@ -25,6 +25,14 @@ declare namespace API {
     triggerType?: string
   }
 
+  type SandboxStartRequest = {
+    appId?: number
+  }
+
+  type SandboxStopRequest = {
+    appId?: number
+  }
+
   type AppQueryRequest = {
     pageNum?: number
     pageSize?: number
@@ -84,6 +92,12 @@ declare namespace API {
   type BaseResponseBuildTaskVO = {
     code?: number
     data?: BuildTaskVO
+    message?: string
+  }
+
+  type BaseResponseSandboxStatusResponse = {
+    code?: number
+    data?: SandboxStatusResponse
     message?: string
   }
 
@@ -179,6 +193,15 @@ declare namespace API {
     content?: string
     lineNo?: number
     createTime?: string
+  }
+
+  type SandboxStatusResponse = {
+    appId?: number
+    deployKey?: string
+    status?: string
+    previewUrl?: string
+    staticUrl?: string
+    errorMessage?: string
   }
 
   type AppVersionVO = {
@@ -336,6 +359,10 @@ declare namespace API {
 
   type getBuildTaskParams = {
     taskId: number
+  }
+
+  type getSandboxStatusParams = {
+    appId: number
   }
 
   type listBuildLogsParams = {

@@ -36,3 +36,7 @@ export const getStaticPreviewUrl = (codeGenType: string, appId: string) => {
   }
   return baseUrl
 }
+
+export const getSandboxPreviewUrl = (appId: string | number) => {
+  return `${API_BASE_URL}/preview/${appId}/`
+}

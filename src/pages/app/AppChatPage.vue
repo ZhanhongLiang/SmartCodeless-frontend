@@ -211,6 +211,17 @@
         <div class="preview-header">
           <h3>生成后的网页展示</h3>
           <div class="preview-actions">
+            <a-tag v-if="sandboxStatus" :color="getSandboxStatusColor(sandboxStatus)">
+              {{ sandboxStatus }}
+            </a-tag>
+            <a-button
+              v-if="isOwner && appInfo?.deployKey"
+              type="link"
+              :loading="sandboxStarting"
+              @click="handleSandboxClick"
+            >
+              Sandbox
+            </a-button>
             <a-button
               v-if="isOwner && previewUrl"
               type="link"
@@ -232,6 +243,7 @@
             </a-button>
           </div>
         </div>
+        <div v-if="sandboxError" class="sandbox-hint">{{ sandboxError }}</div>
         <div class="preview-content">
           <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
             <div class="placeholder-icon">🌐</div>
@@ -326,6 +338,8 @@ import {
   deployApp as deployAppApi,
   getBuildTask,
   listBuildLogs,
+  getSandboxStatus,
+  startSandboxPreview,
   listAppVersions,
   rollbackAppVersion,
   deleteApp as deleteAppApi,
@@ -338,7 +352,7 @@ import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
-import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
+import { API_BASE_URL, getSandboxPreviewUrl, getStaticPreviewUrl } from '@/config/env'
 import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
 
 import {
@@ -404,6 +418,9 @@ const historyLoaded = ref(false)
 // 预览相关
 const previewUrl = ref('')
 const previewReady = ref(false)
+const sandboxStatus = ref('')
+const sandboxError = ref('')
+const sandboxStarting = ref(false)
 
 // 部署相关
 const deploying = ref(false)
@@ -873,11 +890,56 @@ const handleError = (error: unknown, aiMessageIndex: number) => {
 
 // 更新预览
 const updatePreview = () => {
-  if (appId.value) {
-    const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
-    const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
-    previewUrl.value = newPreviewUrl
-    previewReady.value = true
+  if (!appId.value) return
+  const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
+  previewUrl.value = getStaticPreviewUrl(codeGenType, appId.value)
+  previewReady.value = true
+  syncSandboxPreview()
+}
+
+const syncSandboxPreview = async () => {
+  if (!appId.value) return
+  try {
+    const res = await getSandboxStatus({ appId: appId.value as unknown as number })
+    if (res.data.code === 0 && res.data.data) {
+      applySandboxStatus(res.data.data)
+    }
+  } catch (error) {
+    sandboxStatus.value = 'unavailable'
+  }
+}
+
+const applySandboxStatus = (status: API.SandboxStatusResponse) => {
+  sandboxStatus.value = status.status || ''
+  sandboxError.value =
+    status.status === 'failed' || status.status === 'unavailable' ? status.errorMessage || '' : ''
+  if (status.status === 'running') {
+    previewUrl.value = getSandboxPreviewUrl(appId.value)
+    previewReady.value = false
+  }
+}
+
+const restartSandboxPreview = async () => {
+  if (!appId.value) return
+  sandboxStarting.value = true
+  sandboxError.value = ''
+  try {
+    const res = await startSandboxPreview({ appId: appId.value as unknown as number })
+    if (res.data.code === 0 && res.data.data) {
+      applySandboxStatus(res.data.data)
+      if (res.data.data.status === 'running') {
+        message.success('Sandbox preview is running')
+      } else {
+        message.warning(res.data.data.errorMessage || 'Sandbox preview is unavailable')
+      }
+    } else {
+      message.error(res.data.message || 'Start sandbox failed')
+    }
+  } catch (error) {
+    console.error('Start sandbox failed:', error)
+    message.error('Start sandbox failed')
+  } finally {
+    sandboxStarting.value = false
   }
 }
 
@@ -889,6 +951,17 @@ const scrollToBottom = () => {
 }
 
 // 下载代码
+const handleSandboxClick = async () => {
+  if (!appId.value) return
+  if (sandboxStatus.value === 'running') {
+    const url = getSandboxPreviewUrl(appId.value)
+    previewUrl.value = url
+    window.open(url, '_blank')
+    return
+  }
+  await restartSandboxPreview()
+}
+
 const downloadCode = async () => {
   if (!appId.value) {
     message.error('应用ID不存在')
@@ -934,6 +1007,17 @@ const getBuildStatusColor = (status: string) => {
     FAILED: 'error',
     CANCELED: 'default',
     NONE: 'default',
+  }
+  return colorMap[status] || 'default'
+}
+
+const getSandboxStatusColor = (status: string) => {
+  const colorMap: Record<string, string> = {
+    starting: 'processing',
+    running: 'success',
+    failed: 'error',
+    stopped: 'default',
+    unavailable: 'warning',
   }
   return colorMap[status] || 'default'
 }
@@ -1485,6 +1569,12 @@ onUnmounted(() => {
 .preview-actions {
   display: flex;
   gap: 8px;
+}
+
+.sandbox-hint {
+  padding: 0 16px 10px;
+  color: #8c8c8c;
+  font-size: 12px;
 }
 
 .preview-content {
