@@ -9,6 +9,16 @@ export interface ElementInfo {
   textContent: string
   selector: string
   pagePath: string
+  attributes?: Array<{ name: string; value: string }>
+  computedStyle?: Record<string, string>
+  inlineStyle?: Record<string, string>
+  parentSelector?: string
+  childIndex?: number
+  nearbyText?: string
+  componentHint?: string
+  href?: string
+  src?: string
+  ariaLabel?: string
   rect: {
     top: number
     left: number
@@ -259,6 +269,22 @@ export class VisualEditor {
         // 获取元素信息
         function getElementInfo(element) {
           const rect = element.getBoundingClientRect();
+          const styleKeys = ['color', 'backgroundColor', 'fontSize', 'fontWeight', 'lineHeight', 'padding', 'margin', 'borderRadius', 'display', 'gap', 'width', 'height'];
+          const computed = window.getComputedStyle(element);
+          const computedStyle = {};
+          const inlineStyle = {};
+          styleKeys.forEach((key) => {
+            computedStyle[key] = computed[key] || '';
+            inlineStyle[key] = element.style[key] || '';
+          });
+          const attributes = Array.from(element.attributes || [])
+            .filter((attr) => attr.name && !attr.name.startsWith('on') && attr.name !== 'srcdoc')
+            .map((attr) => ({
+              name: attr.name,
+              value: String(attr.value || '').substring(0, 300)
+            }));
+          const parent = element.parentElement;
+          const siblings = Array.from(parent?.children || []);
           // 获取 HTML 文件名后面的部分（查询参数和锚点）
           let pagePath = window.location.search + window.location.hash;
           // 如果没有查询参数和锚点，则显示为空
@@ -273,6 +299,16 @@ export class VisualEditor {
             textContent: element.textContent?.trim().substring(0, 100) || '',
             selector: generateSelector(element),
             pagePath: pagePath,
+            attributes: attributes,
+            computedStyle: computedStyle,
+            inlineStyle: inlineStyle,
+            parentSelector: parent ? generateSelector(parent) : '',
+            childIndex: siblings.indexOf(element),
+            nearbyText: parent?.textContent?.trim().replace(/\\s+/g, ' ').substring(0, 240) || '',
+            componentHint: element.getAttribute('data-component') || element.closest('[data-component]')?.getAttribute('data-component') || '',
+            href: element.getAttribute('href') || '',
+            src: element.getAttribute('src') || '',
+            ariaLabel: element.getAttribute('aria-label') || '',
             rect: {
               top: rect.top,
               left: rect.left,

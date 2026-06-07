@@ -33,6 +33,93 @@ declare namespace API {
     appId?: number
   }
 
+  type VisualEditAttribute = {
+    name?: string
+    value?: string
+  }
+
+  type VisualElementSelection = {
+    tagName?: string
+    id?: string
+    className?: string
+    textContent?: string
+    selector?: string
+    pagePath?: string
+    attributes?: VisualEditAttribute[]
+    computedStyle?: Record<string, string>
+    inlineStyle?: Record<string, string>
+    parentSelector?: string
+    childIndex?: number
+    nearbyText?: string
+    componentHint?: string
+    href?: string
+    src?: string
+    ariaLabel?: string
+  }
+
+  type VisualEditChangeSet = {
+    textContent?: string
+    className?: string
+    inlineStyle?: Record<string, string>
+    attributes?: Record<string, string>
+  }
+
+  type VisualEditPreviewRequest = {
+    appId?: number
+    element?: VisualElementSelection
+    changes?: VisualEditChangeSet
+    instruction?: string
+  }
+
+  type VisualEditApplyRequest = {
+    appId?: number
+    patch?: VisualPatchResult
+    summary?: string
+  }
+
+  type VisualEditTarget = {
+    filePath?: string
+    startLine?: number
+    endLine?: number
+    score?: number
+    reason?: string
+    snippet?: string
+  }
+
+  type VisualPatchResult = {
+    targetFile?: string
+    baseHash?: string
+    beforeSnippet?: string
+    afterSnippet?: string
+    unifiedDiff?: string
+    applicable?: boolean
+    requiresConfirmation?: boolean
+    message?: string
+    candidates?: VisualEditTarget[]
+  }
+
+  type VisualEditPreviewResponse = {
+    appId?: number
+    patch?: VisualPatchResult
+  }
+
+  type VisualEditApplyResponse = {
+    appId?: number
+    version?: AppVersionVO
+    buildTask?: BuildTaskSubmitVO
+    message?: string
+  }
+
+  type VisualEditDraft = {
+    textContent?: string
+    className?: string
+    color?: string
+    backgroundColor?: string
+    fontSize?: string
+    borderRadius?: string
+    instruction?: string
+  }
+
   type AppQueryRequest = {
     pageNum?: number
     pageSize?: number
@@ -122,6 +209,18 @@ declare namespace API {
   type BaseResponseAppRollbackVO = {
     code?: number
     data?: AppRollbackVO
+    message?: string
+  }
+
+  type BaseResponseVisualEditPreviewResponse = {
+    code?: number
+    data?: VisualEditPreviewResponse
+    message?: string
+  }
+
+  type BaseResponseVisualEditApplyResponse = {
+    code?: number
+    data?: VisualEditApplyResponse
     message?: string
   }
 

@@ -82,8 +82,10 @@
         <!-- 选中元素信息展示 -->
         <div v-if="agentTimeline.length > 0" class="agent-timeline">
           <div class="agent-timeline-header">
-            <span>Agent Timeline</span>
-            <a-tag v-if="currentAgentStatus" color="processing">{{ currentAgentStatus }}</a-tag>
+            <span>智能体执行时间线</span>
+            <a-tag v-if="currentAgentStatus" color="processing">
+              {{ formatAgentStatus(currentAgentStatus) }}
+            </a-tag>
           </div>
           <div class="agent-timeline-list">
             <div
@@ -93,8 +95,8 @@
               :class="`agent-${item.kind}`"
             >
               <div class="agent-timeline-main">
-                <span class="agent-timeline-kind">{{ item.kind }}</span>
-                <span class="agent-timeline-title">{{ item.title }}</span>
+                <span class="agent-timeline-kind">{{ formatAgentKind(item.kind) }}</span>
+                <span class="agent-timeline-title">{{ formatAgentTitle(item.title) }}</span>
                 <span class="agent-timeline-time">{{ item.time }}</span>
               </div>
               <div v-if="item.detail && item.kind !== 'diff'" class="agent-timeline-detail">
@@ -112,9 +114,9 @@
         <div v-if="buildTaskId || buildStatus" class="build-progress-panel">
           <div class="build-progress-header">
             <div>
-              <span class="build-title">Build Progress</span>
+              <span class="build-title">构建进度</span>
               <a-tag v-if="buildStatus" :color="getBuildStatusColor(buildStatus)">
-                {{ buildStatus }}
+                {{ formatBuildStatus(buildStatus) }}
               </a-tag>
             </div>
             <span v-if="buildTaskId" class="build-task-id">#{{ buildTaskId }}</span>
@@ -124,7 +126,7 @@
             <a-collapse-panel key="logs" :header="`构建日志 (${buildLogs.length})`">
               <div class="build-log-list">
                 <div v-for="log in buildLogs" :key="log.id" class="build-log-line">
-                  <span class="build-log-type">{{ log.logType }}</span>
+                  <span class="build-log-type">{{ formatBuildLogType(log.logType) }}</span>
                   <span class="build-log-content">{{ log.content }}</span>
                 </div>
               </div>
@@ -169,6 +171,17 @@
           </template>
         </a-alert>
 
+        <VisualEditPanel
+          v-if="selectedElementInfo"
+          :element="selectedElementInfo"
+          :patch="visualPatch"
+          :previewing="visualPatchPreviewing"
+          :applying="visualPatchApplying"
+          @preview="previewVisualPatch"
+          @apply="applyVisualPatch"
+          @close="clearSelectedElement"
+        />
+
         <!-- 用户消息输入框 -->
         <div class="input-container">
           <div class="input-wrapper">
@@ -212,7 +225,7 @@
           <h3>生成后的网页展示</h3>
           <div class="preview-actions">
             <a-tag v-if="sandboxStatus" :color="getSandboxStatusColor(sandboxStatus)">
-              {{ sandboxStatus }}
+              {{ formatSandboxStatus(sandboxStatus) }}
             </a-tag>
             <a-button
               v-if="isOwner && appInfo?.deployKey"
@@ -220,7 +233,7 @@
               :loading="sandboxStarting"
               @click="handleSandboxClick"
             >
-              Sandbox
+              沙盒预览
             </a-button>
             <a-button
               v-if="isOwner && previewUrl"
@@ -293,9 +306,9 @@
           <div v-for="version in appVersions" :key="version.id" class="version-item">
             <div class="version-item-header">
               <div>
-                <span class="version-round">Round {{ version.roundNo }}</span>
+                <span class="version-round">第 {{ version.roundNo }} 轮</span>
                 <a-tag :color="version.versionType === 'ROLLBACK' ? 'orange' : 'blue'">
-                  {{ version.versionType }}
+                  {{ formatVersionType(version.versionType) }}
                 </a-tag>
               </div>
               <code class="version-commit">{{ version.shortCommitId || version.commitId }}</code>
@@ -305,7 +318,7 @@
             </div>
             <div class="version-meta">
               <span>{{ version.createTime }}</span>
-              <span v-if="version.buildTaskId">Build #{{ version.buildTaskId }}</span>
+              <span v-if="version.buildTaskId">构建任务 #{{ version.buildTaskId }}</span>
             </div>
             <div class="version-actions">
               <a-button
@@ -340,6 +353,8 @@ import {
   listBuildLogs,
   getSandboxStatus,
   startSandboxPreview,
+  previewVisualEdit,
+  applyVisualEdit,
   listAppVersions,
   rollbackAppVersion,
   deleteApp as deleteAppApi,
@@ -351,6 +366,7 @@ import request from '@/request'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
+import VisualEditPanel from '@/components/visual-edit/VisualEditPanel.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
 import { API_BASE_URL, getSandboxPreviewUrl, getStaticPreviewUrl } from '@/config/env'
 import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
@@ -443,9 +459,13 @@ const downloading = ref(false)
 // 可视化编辑相关
 const isEditMode = ref(false)
 const selectedElementInfo = ref<ElementInfo | null>(null)
+const visualPatch = ref<API.VisualPatchResult>()
+const visualPatchPreviewing = ref(false)
+const visualPatchApplying = ref(false)
 const visualEditor = new VisualEditor({
   onElementSelected: (elementInfo: ElementInfo) => {
     selectedElementInfo.value = elementInfo
+    visualPatch.value = undefined
   },
 })
 
@@ -928,16 +948,16 @@ const restartSandboxPreview = async () => {
     if (res.data.code === 0 && res.data.data) {
       applySandboxStatus(res.data.data)
       if (res.data.data.status === 'running') {
-        message.success('Sandbox preview is running')
+        message.success('沙盒预览运行中')
       } else {
-        message.warning(res.data.data.errorMessage || 'Sandbox preview is unavailable')
+        message.warning(res.data.data.errorMessage || '沙盒预览不可用')
       }
     } else {
-      message.error(res.data.message || 'Start sandbox failed')
+      message.error(res.data.message || '启动沙盒预览失败')
     }
   } catch (error) {
     console.error('Start sandbox failed:', error)
-    message.error('Start sandbox failed')
+    message.error('启动沙盒预览失败')
   } finally {
     sandboxStarting.value = false
   }
@@ -1022,6 +1042,97 @@ const getSandboxStatusColor = (status: string) => {
   return colorMap[status] || 'default'
 }
 
+const formatBuildStatus = (status?: string) => {
+  const statusMap: Record<string, string> = {
+    QUEUED: '排队中',
+    RUNNING: '构建中',
+    SUCCESS: '构建成功',
+    FAILED: '构建失败',
+    CANCELED: '已取消',
+    NONE: '未构建',
+  }
+  return status ? statusMap[status] || status : ''
+}
+
+const formatSandboxStatus = (status?: string) => {
+  const statusMap: Record<string, string> = {
+    starting: '启动中',
+    running: '运行中',
+    failed: '启动失败',
+    stopped: '已停止',
+    unavailable: '不可用',
+  }
+  return status ? statusMap[status] || status : ''
+}
+
+const formatVersionType = (type?: string) => {
+  const typeMap: Record<string, string> = {
+    AI_GENERATION: 'AI 生成',
+    ROLLBACK: '版本回滚',
+  }
+  return type ? typeMap[type] || type : ''
+}
+
+const formatAgentKind = (kind: AgentTimelineKind) => {
+  const kindMap: Record<AgentTimelineKind, string> = {
+    status: '状态',
+    tool: '工具',
+    diff: '差异',
+    error: '错误',
+    done: '完成',
+  }
+  return kindMap[kind] || kind
+}
+
+const formatAgentStatus = (status?: string) => {
+  const statusMap: Record<string, string> = {
+    preparing: '准备请求',
+    'saving-user-message': '保存用户消息',
+    generating: 'AI 生成中',
+    'building-preview': '构建预览',
+    'saving-history': '保存对话历史',
+    'refreshing-preview': '刷新预览',
+    versioning: '创建版本快照',
+    versioned: '版本快照完成',
+    'version-failed': '版本快照失败',
+  }
+  return status ? statusMap[status] || status : ''
+}
+
+const formatAgentTitle = (title?: string) => {
+  const titleMap: Record<string, string> = {
+    completed: '执行完成',
+    'system error': '系统错误',
+    'business error': '业务错误',
+  }
+  if (!title) return ''
+  let formatted = titleMap[title] || title
+  formatted = formatted
+    .replace('started', '开始')
+    .replace('running', '执行中')
+    .replace('success', '成功')
+    .replace('failed', '失败')
+    .replace('change', '变更')
+    .replace('create', '创建')
+    .replace('update', '更新')
+    .replace('delete', '删除')
+  return formatted
+}
+
+const formatBuildLogType = (type?: string) => {
+  const typeMap: Record<string, string> = {
+    INFO: '信息',
+    ERROR: '错误',
+    WARN: '警告',
+    WARNING: '警告',
+    STDOUT: '标准输出',
+    STDERR: '错误输出',
+    SYSTEM: '系统',
+    TOOL: '工具',
+  }
+  return type ? typeMap[type] || type : ''
+}
+
 const isBuildTerminal = (status?: string) => {
   return status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELED'
 }
@@ -1056,7 +1167,7 @@ const fetchBuildLogs = async (taskId: number) => {
 const fetchBuildTask = async (taskId: number) => {
   const res = await getBuildTask({ taskId })
   if (res.data.code !== 0 || !res.data.data) {
-    throw new Error(res.data.message || 'Failed to fetch build task')
+    throw new Error(res.data.message || '获取构建任务失败')
   }
   const task = res.data.data
   buildStatus.value = task.status || ''
@@ -1128,7 +1239,7 @@ const confirmRollback = (version: API.AppVersionVO) => {
   }
   Modal.confirm({
     title: '确认回滚版本？',
-    content: `将代码回滚到 Round ${version.roundNo} (${version.shortCommitId || version.commitId})，回滚后会自动触发构建任务。`,
+    content: `将代码回滚到第 ${version.roundNo} 轮 (${version.shortCommitId || version.commitId})，回滚后会自动触发构建任务。`,
     okText: '确认回滚',
     cancelText: '取消',
     okButtonProps: { danger: true },
@@ -1266,7 +1377,97 @@ const toggleEditMode = () => {
 
 const clearSelectedElement = () => {
   selectedElementInfo.value = null
+  visualPatch.value = undefined
   visualEditor.clearSelection()
+}
+
+const buildVisualChangeSet = (draft: API.VisualEditDraft): API.VisualEditChangeSet => {
+  const inlineStyle: Record<string, string> = {}
+  if (draft.color?.trim()) inlineStyle.color = draft.color.trim()
+  if (draft.backgroundColor?.trim()) inlineStyle['background-color'] = draft.backgroundColor.trim()
+  if (draft.fontSize?.trim()) inlineStyle['font-size'] = draft.fontSize.trim()
+  if (draft.borderRadius?.trim()) inlineStyle['border-radius'] = draft.borderRadius.trim()
+  return {
+    textContent: draft.textContent?.trim(),
+    className: draft.className?.trim(),
+    inlineStyle: Object.keys(inlineStyle).length ? inlineStyle : undefined,
+  }
+}
+
+const previewVisualPatch = async (draft: API.VisualEditDraft) => {
+  if (!selectedElementInfo.value || !appId.value) {
+    message.warning('请先在预览区选中一个元素')
+    return
+  }
+  visualPatchPreviewing.value = true
+  try {
+    const res = await previewVisualEdit({
+      appId: appId.value as unknown as number,
+      element: selectedElementInfo.value,
+      changes: buildVisualChangeSet(draft),
+      instruction: draft.instruction,
+    })
+    if (res.data.code === 0 && res.data.data?.patch) {
+      visualPatch.value = res.data.data.patch
+      if (res.data.data.patch.applicable) {
+        message.success('差异预览已生成')
+      } else {
+        message.warning(res.data.data.patch.message || 'No patch generated')
+      }
+    } else {
+      message.error(res.data.message || '生成可视化差异预览失败')
+    }
+  } catch (error) {
+    console.error('Preview visual edit failed:', error)
+    message.error('生成可视化差异预览失败')
+  } finally {
+    visualPatchPreviewing.value = false
+  }
+}
+
+const applyVisualPatch = async (draft: API.VisualEditDraft) => {
+  if (!visualPatch.value?.applicable || !appId.value) {
+    message.warning('请先生成有效的差异预览')
+    return
+  }
+  const doApply = async () => {
+    visualPatchApplying.value = true
+    try {
+      const res = await applyVisualEdit({
+        appId: appId.value as unknown as number,
+        patch: visualPatch.value,
+        summary: draft.instruction || `Visual edit: ${selectedElementInfo.value?.selector || ''}`,
+      })
+      if (res.data.code === 0 && res.data.data) {
+        const task = res.data.data.buildTask
+        message.success('可视化补丁已应用')
+        if (task?.taskId) {
+          buildTaskId.value = task.taskId
+          buildStatus.value = task.status || 'QUEUED'
+          buildLogs.value = []
+          startBuildPolling(task.taskId)
+        }
+        clearSelectedElement()
+        await openVersionDrawer()
+      } else {
+        message.error(res.data.message || '应用可视化补丁失败')
+      }
+    } catch (error) {
+      console.error('Apply visual edit failed:', error)
+      message.error('应用可视化补丁失败')
+    } finally {
+      visualPatchApplying.value = false
+    }
+  }
+  if (visualPatch.value.requiresConfirmation) {
+    Modal.confirm({
+      title: '确认应用可视化补丁',
+      content: '检测到多个相近的源码位置，请先确认当前差异就是你想修改的位置。',
+      onOk: doApply,
+    })
+    return
+  }
+  await doApply()
 }
 
 const getInputPlaceholder = () => {

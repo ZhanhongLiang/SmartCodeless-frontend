@@ -187,6 +187,34 @@ export async function stopSandboxPreview(
   })
 }
 
+export async function previewVisualEdit(
+  body: API.VisualEditPreviewRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseVisualEditPreviewResponse>('/app/visual/edit/preview', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+export async function applyVisualEdit(
+  body: API.VisualEditApplyRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseVisualEditApplyResponse>('/app/visual/edit/apply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 export async function listAppVersions(
   params: API.listAppVersionsParams,
   options?: { [key: string]: any }
