@@ -15,6 +15,12 @@
           </template>
           应用详情
         </a-button>
+        <a-button type="default" @click="openVersionDrawer" :disabled="!isOwner && !isAdmin">
+          <template #icon>
+            <HistoryOutlined />
+          </template>
+          版本历史
+        </a-button>
         <a-button
           type="primary"
           ghost
@@ -101,6 +107,29 @@
               </a-collapse>
             </div>
           </div>
+        </div>
+
+        <div v-if="buildTaskId || buildStatus" class="build-progress-panel">
+          <div class="build-progress-header">
+            <div>
+              <span class="build-title">Build Progress</span>
+              <a-tag v-if="buildStatus" :color="getBuildStatusColor(buildStatus)">
+                {{ buildStatus }}
+              </a-tag>
+            </div>
+            <span v-if="buildTaskId" class="build-task-id">#{{ buildTaskId }}</span>
+          </div>
+          <div v-if="buildError" class="build-error">{{ buildError }}</div>
+          <a-collapse v-if="buildLogs.length > 0" size="small" ghost>
+            <a-collapse-panel key="logs" :header="`构建日志 (${buildLogs.length})`">
+              <div class="build-log-list">
+                <div v-for="log in buildLogs" :key="log.id" class="build-log-line">
+                  <span class="build-log-type">{{ log.logType }}</span>
+                  <span class="build-log-content">{{ log.content }}</span>
+                </div>
+              </div>
+            </a-collapse-panel>
+          </a-collapse>
         </div>
 
         <a-alert
@@ -238,17 +267,67 @@
       :deploy-url="deployUrl"
       @open-site="openDeployedSite"
     />
+
+    <a-drawer
+      v-model:open="versionDrawerVisible"
+      title="版本历史"
+      width="520"
+      placement="right"
+      @open-change="handleVersionDrawerOpenChange"
+    >
+      <a-spin :spinning="versionLoading">
+        <a-empty v-if="appVersions.length === 0 && !versionLoading" description="暂无版本记录" />
+        <div v-else class="version-list">
+          <div v-for="version in appVersions" :key="version.id" class="version-item">
+            <div class="version-item-header">
+              <div>
+                <span class="version-round">Round {{ version.roundNo }}</span>
+                <a-tag :color="version.versionType === 'ROLLBACK' ? 'orange' : 'blue'">
+                  {{ version.versionType }}
+                </a-tag>
+              </div>
+              <code class="version-commit">{{ version.shortCommitId || version.commitId }}</code>
+            </div>
+            <div class="version-summary">
+              {{ version.promptSummary || version.commitMessage }}
+            </div>
+            <div class="version-meta">
+              <span>{{ version.createTime }}</span>
+              <span v-if="version.buildTaskId">Build #{{ version.buildTaskId }}</span>
+            </div>
+            <div class="version-actions">
+              <a-button
+                size="small"
+                danger
+                :loading="versionRollingBack"
+                :disabled="!version.commitId || versionRollingBack"
+                @click="confirmRollback(version)"
+              >
+                <template #icon>
+                  <RollbackOutlined />
+                </template>
+                回滚到此版本
+              </a-button>
+            </div>
+          </div>
+        </div>
+      </a-spin>
+    </a-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
 import {
   getAppVoById,
   deployApp as deployAppApi,
+  getBuildTask,
+  listBuildLogs,
+  listAppVersions,
+  rollbackAppVersion,
   deleteApp as deleteAppApi,
 } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
@@ -269,6 +348,8 @@ import {
   InfoCircleOutlined,
   DownloadOutlined,
   EditOutlined,
+  HistoryOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -328,6 +409,16 @@ const previewReady = ref(false)
 const deploying = ref(false)
 const deployModalVisible = ref(false)
 const deployUrl = ref('')
+const buildTaskId = ref<number>()
+const buildStatus = ref('')
+const buildError = ref('')
+const buildLogs = ref<API.BuildLogVO[]>([])
+let buildPollingTimer: number | undefined
+
+const versionDrawerVisible = ref(false)
+const versionLoading = ref(false)
+const versionRollingBack = ref(false)
+const appVersions = ref<API.AppVersionVO[]>([])
 
 // 下载相关
 const downloading = ref(false)
@@ -427,6 +518,7 @@ const fetchAppInfo = async () => {
     const res = await getAppVoById({ id: id as unknown as number })
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
+      syncBuildStateFromApp()
 
       // 先加载对话历史
       await loadChatHistory()
@@ -834,7 +926,160 @@ const downloadCode = async () => {
   }
 }
 
+const getBuildStatusColor = (status: string) => {
+  const colorMap: Record<string, string> = {
+    QUEUED: 'blue',
+    RUNNING: 'processing',
+    SUCCESS: 'success',
+    FAILED: 'error',
+    CANCELED: 'default',
+    NONE: 'default',
+  }
+  return colorMap[status] || 'default'
+}
+
+const isBuildTerminal = (status?: string) => {
+  return status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELED'
+}
+
+const clearBuildPolling = () => {
+  if (buildPollingTimer) {
+    window.clearInterval(buildPollingTimer)
+    buildPollingTimer = undefined
+  }
+}
+
+const syncBuildStateFromApp = () => {
+  if (!appInfo.value) return
+  buildStatus.value = appInfo.value.deployStatus || ''
+  buildError.value = appInfo.value.buildErrorMessage || ''
+  if (appInfo.value.buildTaskId) {
+    buildTaskId.value = appInfo.value.buildTaskId
+    if (!isBuildTerminal(buildStatus.value)) {
+      startBuildPolling(appInfo.value.buildTaskId)
+    }
+  }
+}
+
+const fetchBuildLogs = async (taskId: number) => {
+  const lastId = buildLogs.value.length ? buildLogs.value[buildLogs.value.length - 1].id : undefined
+  const res = await listBuildLogs({ taskId, lastId, pageSize: 100 })
+  if (res.data.code === 0 && res.data.data?.length) {
+    buildLogs.value.push(...res.data.data)
+  }
+}
+
+const fetchBuildTask = async (taskId: number) => {
+  const res = await getBuildTask({ taskId })
+  if (res.data.code !== 0 || !res.data.data) {
+    throw new Error(res.data.message || 'Failed to fetch build task')
+  }
+  const task = res.data.data
+  buildStatus.value = task.status || ''
+  buildError.value = task.errorMessage || ''
+  if (task.deployUrl) {
+    deployUrl.value = task.deployUrl
+  }
+  await fetchBuildLogs(taskId)
+  if (isBuildTerminal(task.status)) {
+    clearBuildPolling()
+    deploying.value = false
+    if (task.status === 'SUCCESS') {
+      message.success('构建成功，已刷新预览')
+      deployModalVisible.value = true
+      await fetchAppInfo()
+      updatePreview()
+    } else if (task.status === 'FAILED') {
+      message.error('构建失败，请查看构建日志')
+    }
+  }
+}
+
+const startBuildPolling = (taskId: number) => {
+  clearBuildPolling()
+  buildPollingTimer = window.setInterval(() => {
+    fetchBuildTask(taskId).catch((error) => {
+      console.error('查询构建任务失败：', error)
+    })
+  }, 2000)
+  fetchBuildTask(taskId).catch((error) => {
+    console.error('查询构建任务失败：', error)
+  })
+}
+
 // 部署应用
+const loadAppVersions = async () => {
+  if (!appId.value) return
+  versionLoading.value = true
+  try {
+    const res = await listAppVersions({ appId: appId.value as unknown as number })
+    if (res.data.code === 0 && res.data.data) {
+      appVersions.value = res.data.data
+    } else {
+      message.error('加载版本历史失败：' + res.data.message)
+    }
+  } catch (error) {
+    console.error('加载版本历史失败：', error)
+    message.error('加载版本历史失败')
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+const openVersionDrawer = async () => {
+  versionDrawerVisible.value = true
+  await loadAppVersions()
+}
+
+const handleVersionDrawerOpenChange = (open: boolean) => {
+  if (open) {
+    loadAppVersions()
+  }
+}
+
+const confirmRollback = (version: API.AppVersionVO) => {
+  if (!version.commitId || !appId.value) {
+    message.error('版本 commit 不存在')
+    return
+  }
+  Modal.confirm({
+    title: '确认回滚版本？',
+    content: `将代码回滚到 Round ${version.roundNo} (${version.shortCommitId || version.commitId})，回滚后会自动触发构建任务。`,
+    okText: '确认回滚',
+    cancelText: '取消',
+    okButtonProps: { danger: true },
+    async onOk() {
+      versionRollingBack.value = true
+      try {
+        const res = await rollbackAppVersion({
+          appId: appId.value as unknown as number,
+          commitId: version.commitId,
+          reason: `Rollback to round ${version.roundNo}`,
+        })
+        if (res.data.code === 0 && res.data.data) {
+          const rollbackResult = res.data.data
+          message.success('已回滚，构建任务已进入队列')
+          buildTaskId.value = rollbackResult.buildTaskId
+          buildStatus.value = rollbackResult.status || 'QUEUED'
+          buildError.value = ''
+          buildLogs.value = []
+          if (rollbackResult.buildTaskId) {
+            startBuildPolling(rollbackResult.buildTaskId)
+          }
+          await loadAppVersions()
+        } else {
+          message.error('回滚失败：' + res.data.message)
+        }
+      } catch (error) {
+        console.error('回滚失败：', error)
+        message.error('回滚失败')
+      } finally {
+        versionRollingBack.value = false
+      }
+    },
+  })
+}
+
 const deployApp = async () => {
   if (!appId.value) {
     message.error('应用ID不存在')
@@ -848,9 +1093,15 @@ const deployApp = async () => {
     })
 
     if (res.data.code === 0 && res.data.data) {
-      deployUrl.value = res.data.data
-      deployModalVisible.value = true
-      message.success('部署成功')
+      const task = res.data.data
+      buildTaskId.value = task.taskId
+      buildStatus.value = task.status || 'QUEUED'
+      buildError.value = ''
+      buildLogs.value = []
+      if (task.taskId) {
+        startBuildPolling(task.taskId)
+      }
+      message.success('构建任务已进入队列')
     } else {
       message.error('部署失败：' + res.data.message)
     }
@@ -954,6 +1205,7 @@ onMounted(() => {
 // 清理资源
 onUnmounted(() => {
   activeEventSource.value?.close()
+  clearBuildPolling()
 })
 </script>
 
@@ -1274,11 +1526,116 @@ onUnmounted(() => {
   border: none;
 }
 
+.build-progress-panel {
+  margin: 0 16px 12px;
+  padding: 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.build-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.build-title {
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+.build-task-id {
+  color: #8c8c8c;
+  font-size: 12px;
+}
+
+.build-error {
+  margin-top: 8px;
+  color: #ff4d4f;
+}
+
+.build-log-list {
+  max-height: 220px;
+  overflow: auto;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.build-log-line {
+  display: flex;
+  gap: 8px;
+  white-space: pre-wrap;
+}
+
+.build-log-type {
+  min-width: 56px;
+  color: #1677ff;
+}
+
+.build-log-content {
+  flex: 1;
+  word-break: break-word;
+}
+
 .selected-element-alert {
   margin: 0 16px;
 }
 
 /* 响应式设计 */
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.version-item {
+  padding: 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.version-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.version-round {
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+.version-commit {
+  color: #1677ff;
+  font-size: 12px;
+}
+
+.version-summary {
+  margin-top: 8px;
+  color: #262626;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.version-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: #8c8c8c;
+  font-size: 12px;
+}
+
+.version-actions {
+  margin-top: 12px;
+  text-align: right;
+}
+
 @media (max-width: 1024px) {
   .main-content {
     flex-direction: column;

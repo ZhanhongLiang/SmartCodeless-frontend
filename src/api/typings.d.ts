@@ -14,6 +14,17 @@ declare namespace API {
     appId?: number
   }
 
+  type AppVersionRollbackRequest = {
+    appId?: number
+    commitId?: string
+    reason?: string
+  }
+
+  type BuildTaskSubmitRequest = {
+    appId?: number
+    triggerType?: string
+  }
+
   type AppQueryRequest = {
     pageNum?: number
     pageSize?: number
@@ -42,6 +53,9 @@ declare namespace API {
     codeGenType?: string
     deployKey?: string
     deployedTime?: string
+    deployStatus?: string
+    buildTaskId?: number
+    buildErrorMessage?: string
     priority?: number
     userId?: number
     createTime?: string
@@ -58,6 +72,42 @@ declare namespace API {
   type BaseResponseBoolean = {
     code?: number
     data?: boolean
+    message?: string
+  }
+
+  type BaseResponseBuildTaskSubmitVO = {
+    code?: number
+    data?: BuildTaskSubmitVO
+    message?: string
+  }
+
+  type BaseResponseBuildTaskVO = {
+    code?: number
+    data?: BuildTaskVO
+    message?: string
+  }
+
+  type BaseResponseListBuildLogVO = {
+    code?: number
+    data?: BuildLogVO[]
+    message?: string
+  }
+
+  type BaseResponseAppVersionVO = {
+    code?: number
+    data?: AppVersionVO
+    message?: string
+  }
+
+  type BaseResponseListAppVersionVO = {
+    code?: number
+    data?: AppVersionVO[]
+    message?: string
+  }
+
+  type BaseResponseAppRollbackVO = {
+    code?: number
+    data?: AppRollbackVO
     message?: string
   }
 
@@ -94,6 +144,65 @@ declare namespace API {
   type BaseResponseString = {
     code?: number
     data?: string
+    message?: string
+  }
+
+  type BuildTaskSubmitVO = {
+    taskId?: number
+    appId?: number
+    status?: string
+    deployUrl?: string
+    message?: string
+  }
+
+  type BuildTaskVO = {
+    id?: number
+    appId?: number
+    userId?: number
+    triggerType?: string
+    status?: string
+    sourceDir?: string
+    distDir?: string
+    deployKey?: string
+    deployUrl?: string
+    errorMessage?: string
+    queuedTime?: string
+    startTime?: string
+    finishTime?: string
+  }
+
+  type BuildLogVO = {
+    id?: number
+    taskId?: number
+    appId?: number
+    logType?: string
+    content?: string
+    lineNo?: number
+    createTime?: string
+  }
+
+  type AppVersionVO = {
+    id?: number
+    appId?: number
+    userId?: number
+    roundNo?: number
+    commitId?: string
+    shortCommitId?: string
+    commitMessage?: string
+    promptSummary?: string
+    codeGenType?: string
+    versionType?: string
+    rollbackFromCommitId?: string
+    buildTaskId?: number
+    createTime?: string
+  }
+
+  type AppRollbackVO = {
+    appId?: number
+    targetCommitId?: string
+    rollbackVersionId?: number
+    buildTaskId?: number
+    status?: string
     message?: string
   }
 
@@ -223,6 +332,24 @@ declare namespace API {
 
   type serveStaticResourceParams = {
     deployKey: string
+  }
+
+  type getBuildTaskParams = {
+    taskId: number
+  }
+
+  type listBuildLogsParams = {
+    taskId: number
+    lastId?: number
+    pageSize?: number
+  }
+
+  type listAppVersionsParams = {
+    appId: number
+  }
+
+  type getAppVersionParams = {
+    versionId: number
   }
 
   type User = {

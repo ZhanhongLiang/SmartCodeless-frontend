@@ -132,7 +132,10 @@ const viewWork = (app: API.AppVO) => {
 // 格式化时间函数已移除，不再需要显示创建时间
 
 // 页面加载时获取数据
-onMounted(() => {
+onMounted(async () => {
+  if (!loginUserStore.loginUser.id) {
+    await loginUserStore.fetchLoginUser()
+  }
   loadMyApps()
   loadFeaturedApps()
 

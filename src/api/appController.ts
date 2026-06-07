@@ -100,7 +100,7 @@ export async function deleteApp(body: API.DeleteRequest, options?: { [key: strin
 
 /** 此处后端没有提供注释 POST /app/deploy */
 export async function deployApp(body: API.AppDeployRequest, options?: { [key: string]: any }) {
-  return request<API.BaseResponseString>('/app/deploy', {
+  return request<API.BaseResponseBuildTaskSubmitVO>('/app/deploy', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -110,7 +110,81 @@ export async function deployApp(body: API.AppDeployRequest, options?: { [key: st
   })
 }
 
+export async function submitBuildTask(
+  body: API.BuildTaskSubmitRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseBuildTaskSubmitVO>('/app/build/submit', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+export async function getBuildTask(
+  params: API.getBuildTaskParams,
+  options?: { [key: string]: any }
+) {
+  const { taskId: param0, ...queryParams } = params
+  return request<API.BaseResponseBuildTaskVO>(`/app/build/task/${param0}`, {
+    method: 'GET',
+    params: { ...queryParams },
+    ...(options || {}),
+  })
+}
+
+export async function listBuildLogs(
+  params: API.listBuildLogsParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseListBuildLogVO>('/app/build/logs', {
+    method: 'GET',
+    params: { ...params },
+    ...(options || {}),
+  })
+}
+
 /** 此处后端没有提供注释 GET /app/download/${param0} */
+export async function listAppVersions(
+  params: API.listAppVersionsParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseListAppVersionVO>('/app/version/list', {
+    method: 'GET',
+    params: { ...params },
+    ...(options || {}),
+  })
+}
+
+export async function getAppVersion(
+  params: API.getAppVersionParams,
+  options?: { [key: string]: any }
+) {
+  const { versionId: param0, ...queryParams } = params
+  return request<API.BaseResponseAppVersionVO>(`/app/version/detail/${param0}`, {
+    method: 'GET',
+    params: { ...queryParams },
+    ...(options || {}),
+  })
+}
+
+export async function rollbackAppVersion(
+  body: API.AppVersionRollbackRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseAppRollbackVO>('/app/version/rollback', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
 export async function downloadAppCode(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.downloadAppCodeParams,
