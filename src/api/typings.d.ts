@@ -120,6 +120,88 @@ declare namespace API {
     instruction?: string
   }
 
+  type QualityCheckRequest = {
+    appId?: number
+    triggerType?: string
+    autoRepair?: boolean
+  }
+
+  type QualityRepairRequest = {
+    taskId?: number
+    appId?: number
+  }
+
+  type QualityRepairApplyRequest = {
+    attemptId?: number
+  }
+
+  type QualityCheckTaskVO = {
+    id?: number
+    appId?: number
+    userId?: number
+    versionId?: number
+    commitId?: string
+    buildTaskId?: number
+    triggerType?: string
+    status?: string
+    currentStage?: string
+    failureCategory?: string
+    score?: number
+    errorMessage?: string
+    createTime?: string
+    updateTime?: string
+    finishTime?: string
+  }
+
+  type QualityCheckReportVO = {
+    id?: number
+    taskId?: number
+    appId?: number
+    userId?: number
+    dependencyPolicyStatus?: string
+    scriptPolicyStatus?: string
+    buildStatus?: string
+    previewSmokeStatus?: string
+    repairStatus?: string
+    failureCategory?: string
+    score?: number
+    summaryJson?: string
+    sanitizedLogSummary?: string
+    createTime?: string
+    updateTime?: string
+  }
+
+  type SelfHealingAttemptVO = {
+    id?: number
+    taskId?: number
+    appId?: number
+    userId?: number
+    attemptNo?: number
+    status?: string
+    failureCategory?: string
+    patchTargetFile?: string
+    beforeSnippet?: string
+    afterSnippet?: string
+    unifiedDiff?: string
+    diagnosis?: string
+    errorMessage?: string
+    createTime?: string
+    updateTime?: string
+    finishTime?: string
+  }
+
+  type DependencyPolicyViolationVO = {
+    id?: number
+    taskId?: number
+    appId?: number
+    packageName?: string
+    versionSpec?: string
+    violationType?: string
+    severity?: string
+    message?: string
+    createTime?: string
+  }
+
   type AppQueryRequest = {
     pageNum?: number
     pageSize?: number
@@ -221,6 +303,42 @@ declare namespace API {
   type BaseResponseVisualEditApplyResponse = {
     code?: number
     data?: VisualEditApplyResponse
+    message?: string
+  }
+
+  type BaseResponseQualityCheckTaskVO = {
+    code?: number
+    data?: QualityCheckTaskVO
+    message?: string
+  }
+
+  type BaseResponseQualityCheckReportVO = {
+    code?: number
+    data?: QualityCheckReportVO
+    message?: string
+  }
+
+  type BaseResponseListQualityCheckReportVO = {
+    code?: number
+    data?: QualityCheckReportVO[]
+    message?: string
+  }
+
+  type BaseResponseListDependencyPolicyViolationVO = {
+    code?: number
+    data?: DependencyPolicyViolationVO[]
+    message?: string
+  }
+
+  type BaseResponseSelfHealingAttemptVO = {
+    code?: number
+    data?: SelfHealingAttemptVO
+    message?: string
+  }
+
+  type BaseResponseListSelfHealingAttemptVO = {
+    code?: number
+    data?: SelfHealingAttemptVO[]
     message?: string
   }
 
@@ -476,6 +594,26 @@ declare namespace API {
 
   type getAppVersionParams = {
     versionId: number
+  }
+
+  type getQualityTaskParams = {
+    taskId: number
+  }
+
+  type listQualityReportsParams = {
+    appId: number
+  }
+
+  type latestQualityReportParams = {
+    appId: number
+  }
+
+  type listQualityViolationsParams = {
+    taskId: number
+  }
+
+  type listSelfHealingAttemptsParams = {
+    taskId: number
   }
 
   type User = {

@@ -21,6 +21,12 @@
           </template>
           版本历史
         </a-button>
+        <a-button type="default" @click="runQualityCheck" :loading="qualityChecking" :disabled="!isOwner">
+          <template #icon>
+            <SafetyCertificateOutlined />
+          </template>
+          质量检查
+        </a-button>
         <a-button
           type="primary"
           ghost
@@ -133,6 +139,20 @@
             </a-collapse-panel>
           </a-collapse>
         </div>
+
+        <QualityReportPanel
+          v-if="qualityTask || qualityReport"
+          :task="qualityTask"
+          :report="qualityReport"
+          :violations="qualityViolations"
+          :attempts="selfHealingAttempts"
+          :checking="qualityChecking"
+          :repairing="qualityRepairing"
+          :applying="qualityRepairApplying"
+          @check="runQualityCheck"
+          @repair="createQualityRepair"
+          @apply="applyQualityRepair"
+        />
 
         <a-alert
           v-if="selectedElementInfo"
@@ -355,6 +375,13 @@ import {
   startSandboxPreview,
   previewVisualEdit,
   applyVisualEdit,
+  submitQualityCheck,
+  getQualityTask,
+  latestQualityReport,
+  listQualityViolations,
+  createSelfHealingAttempt,
+  applySelfHealingAttempt,
+  listSelfHealingAttempts,
   listAppVersions,
   rollbackAppVersion,
   deleteApp as deleteAppApi,
@@ -367,6 +394,7 @@ import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import VisualEditPanel from '@/components/visual-edit/VisualEditPanel.vue'
+import QualityReportPanel from '@/components/quality/QualityReportPanel.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
 import { API_BASE_URL, getSandboxPreviewUrl, getStaticPreviewUrl } from '@/config/env'
 import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
@@ -380,6 +408,7 @@ import {
   EditOutlined,
   HistoryOutlined,
   RollbackOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -447,6 +476,15 @@ const buildStatus = ref('')
 const buildError = ref('')
 const buildLogs = ref<API.BuildLogVO[]>([])
 let buildPollingTimer: number | undefined
+
+const qualityTask = ref<API.QualityCheckTaskVO>()
+const qualityReport = ref<API.QualityCheckReportVO>()
+const qualityViolations = ref<API.DependencyPolicyViolationVO[]>([])
+const selfHealingAttempts = ref<API.SelfHealingAttemptVO[]>([])
+const qualityChecking = ref(false)
+const qualityRepairing = ref(false)
+const qualityRepairApplying = ref(false)
+let qualityPollingTimer: number | undefined
 
 const versionDrawerVisible = ref(false)
 const versionLoading = ref(false)
@@ -1203,6 +1241,154 @@ const startBuildPolling = (taskId: number) => {
 }
 
 // 部署应用
+const isQualityTerminal = (status?: string) => {
+  return status === 'SUCCESS' || status === 'FAILED' || status === 'REPAIRABLE'
+}
+
+const clearQualityPolling = () => {
+  if (qualityPollingTimer) {
+    window.clearInterval(qualityPollingTimer)
+    qualityPollingTimer = undefined
+  }
+}
+
+const loadQualityDetails = async (taskId: number) => {
+  const [violationRes, attemptRes] = await Promise.all([
+    listQualityViolations({ taskId }),
+    listSelfHealingAttempts({ taskId }),
+  ])
+  if (violationRes.data.code === 0) {
+    qualityViolations.value = violationRes.data.data || []
+  }
+  if (attemptRes.data.code === 0) {
+    selfHealingAttempts.value = attemptRes.data.data || []
+  }
+}
+
+const loadLatestQualityReport = async () => {
+  if (!appId.value) return
+  try {
+    const res = await latestQualityReport({ appId: appId.value as unknown as number })
+    if (res.data.code === 0 && res.data.data) {
+      qualityReport.value = res.data.data
+      if (res.data.data.taskId) {
+        await loadQualityDetails(res.data.data.taskId)
+      }
+    }
+  } catch (error) {
+    console.error('加载质量报告失败：', error)
+  }
+}
+
+const fetchQualityTask = async (taskId: number) => {
+  const res = await getQualityTask({ taskId })
+  if (res.data.code !== 0 || !res.data.data) {
+    throw new Error(res.data.message || '获取质量检查任务失败')
+  }
+  qualityTask.value = res.data.data
+  if (isQualityTerminal(res.data.data.status)) {
+    clearQualityPolling()
+    qualityChecking.value = false
+    await loadLatestQualityReport()
+    if (res.data.data.status === 'SUCCESS') {
+      message.success('质量检查通过')
+    } else if (res.data.data.status === 'REPAIRABLE') {
+      message.warning('质量检查发现可修复问题')
+    } else {
+      message.error('质量检查失败')
+    }
+  }
+}
+
+const startQualityPolling = (taskId: number) => {
+  clearQualityPolling()
+  qualityPollingTimer = window.setInterval(() => {
+    fetchQualityTask(taskId).catch((error) => {
+      console.error('查询质量检查任务失败：', error)
+    })
+  }, 2500)
+  fetchQualityTask(taskId).catch((error) => {
+    console.error('查询质量检查任务失败：', error)
+  })
+}
+
+const runQualityCheck = async () => {
+  if (!appId.value) {
+    message.error('应用ID不存在')
+    return
+  }
+  qualityChecking.value = true
+  try {
+    const res = await submitQualityCheck({
+      appId: appId.value as unknown as number,
+      triggerType: 'MANUAL',
+      autoRepair: false,
+    })
+    if (res.data.code === 0 && res.data.data?.id) {
+      qualityTask.value = res.data.data
+      qualityReport.value = undefined
+      qualityViolations.value = []
+      selfHealingAttempts.value = []
+      message.success('质量检查任务已提交')
+      startQualityPolling(res.data.data.id)
+    } else {
+      message.error(res.data.message || '提交质量检查失败')
+      qualityChecking.value = false
+    }
+  } catch (error) {
+    console.error('提交质量检查失败：', error)
+    message.error('提交质量检查失败')
+    qualityChecking.value = false
+  }
+}
+
+const createQualityRepair = async () => {
+  if (!qualityTask.value?.id || !appId.value) {
+    message.warning('请先运行质量检查')
+    return
+  }
+  qualityRepairing.value = true
+  try {
+    const res = await createSelfHealingAttempt({
+      taskId: qualityTask.value.id,
+      appId: appId.value as unknown as number,
+    })
+    if (res.data.code === 0 && res.data.data) {
+      selfHealingAttempts.value = [res.data.data, ...selfHealingAttempts.value]
+      message.success('自愈修复建议已生成')
+    } else {
+      message.error(res.data.message || '生成自愈修复建议失败')
+    }
+  } catch (error) {
+    console.error('生成自愈修复建议失败：', error)
+    message.error('生成自愈修复建议失败')
+  } finally {
+    qualityRepairing.value = false
+  }
+}
+
+const applyQualityRepair = async (attempt: API.SelfHealingAttemptVO) => {
+  if (!attempt.id) return
+  qualityRepairApplying.value = true
+  try {
+    const res = await applySelfHealingAttempt({ attemptId: attempt.id })
+    if (res.data.code === 0 && res.data.data) {
+      message.success('自愈补丁已应用，已触发重新构建')
+      if (qualityTask.value?.id) {
+        await loadQualityDetails(qualityTask.value.id)
+      }
+      await fetchAppInfo()
+    } else {
+      message.error(res.data.message || '应用自愈补丁失败')
+    }
+  } catch (error) {
+    console.error('应用自愈补丁失败：', error)
+    message.error('应用自愈补丁失败')
+  } finally {
+    qualityRepairApplying.value = false
+  }
+}
+
 const loadAppVersions = async () => {
   if (!appId.value) return
   versionLoading.value = true
@@ -1480,6 +1666,7 @@ const getInputPlaceholder = () => {
 // 页面加载时获取应用信息
 onMounted(() => {
   fetchAppInfo()
+  loadLatestQualityReport()
 
   // 监听 iframe 消息
   window.addEventListener('message', (event) => {
@@ -1491,6 +1678,7 @@ onMounted(() => {
 onUnmounted(() => {
   activeEventSource.value?.close()
   clearBuildPolling()
+  clearQualityPolling()
 })
 </script>
 

@@ -252,6 +252,107 @@ export async function rollbackAppVersion(
   })
 }
 
+export async function submitQualityCheck(
+  body: API.QualityCheckRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseQualityCheckTaskVO>('/app/quality/check', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+export async function getQualityTask(
+  params: API.getQualityTaskParams,
+  options?: { [key: string]: any }
+) {
+  const { taskId: param0, ...queryParams } = params
+  return request<API.BaseResponseQualityCheckTaskVO>(`/app/quality/task/${param0}`, {
+    method: 'GET',
+    params: { ...queryParams },
+    ...(options || {}),
+  })
+}
+
+export async function listQualityReports(
+  params: API.listQualityReportsParams,
+  options?: { [key: string]: any }
+) {
+  const { appId: param0, ...queryParams } = params
+  return request<API.BaseResponseListQualityCheckReportVO>(`/app/quality/report/${param0}`, {
+    method: 'GET',
+    params: { ...queryParams },
+    ...(options || {}),
+  })
+}
+
+export async function latestQualityReport(
+  params: API.latestQualityReportParams,
+  options?: { [key: string]: any }
+) {
+  const { appId: param0, ...queryParams } = params
+  return request<API.BaseResponseQualityCheckReportVO>(`/app/quality/report/${param0}/latest`, {
+    method: 'GET',
+    params: { ...queryParams },
+    ...(options || {}),
+  })
+}
+
+export async function listQualityViolations(
+  params: API.listQualityViolationsParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseListDependencyPolicyViolationVO>('/app/quality/violations', {
+    method: 'GET',
+    params: { ...params },
+    ...(options || {}),
+  })
+}
+
+export async function createSelfHealingAttempt(
+  body: API.QualityRepairRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseSelfHealingAttemptVO>('/app/quality/repair', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+export async function applySelfHealingAttempt(
+  body: API.QualityRepairApplyRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseSelfHealingAttemptVO>('/app/quality/repair/apply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+export async function listSelfHealingAttempts(
+  params: API.listSelfHealingAttemptsParams,
+  options?: { [key: string]: any }
+) {
+  const { taskId: param0, ...queryParams } = params
+  return request<API.BaseResponseListSelfHealingAttemptVO>(`/app/quality/repair/attempts/${param0}`, {
+    method: 'GET',
+    params: { ...queryParams },
+    ...(options || {}),
+  })
+}
+
 export async function downloadAppCode(
   // 叠加生成的Param类型 (非body参数swagger默认没有生成对象)
   params: API.downloadAppCodeParams,
