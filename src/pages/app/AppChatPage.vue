@@ -85,125 +85,174 @@
           </div>
         </div>
 
-        <!-- 选中元素信息展示 -->
-        <div v-if="agentTimeline.length > 0" class="agent-timeline">
-          <div class="agent-timeline-header">
-            <span>智能体执行时间线</span>
-            <a-tag v-if="currentAgentStatus" color="processing">
-              {{ formatAgentStatus(currentAgentStatus) }}
-            </a-tag>
-          </div>
-          <div class="agent-timeline-list">
-            <div
-              v-for="item in agentTimeline"
-              :key="item.id"
-              class="agent-timeline-item"
-              :class="`agent-${item.kind}`"
-            >
-              <div class="agent-timeline-main">
-                <span class="agent-timeline-kind">{{ formatAgentKind(item.kind) }}</span>
-                <span class="agent-timeline-title">{{ formatAgentTitle(item.title) }}</span>
-                <span class="agent-timeline-time">{{ item.time }}</span>
-              </div>
-              <div v-if="item.detail && item.kind !== 'diff'" class="agent-timeline-detail">
-                {{ item.detail }}
-              </div>
-              <a-collapse v-if="item.kind === 'diff' && item.detail" size="small" ghost>
-                <a-collapse-panel key="diff" :header="item.title">
-                  <pre class="agent-diff-content">{{ item.detail }}</pre>
-                </a-collapse-panel>
-              </a-collapse>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="buildTaskId || buildStatus" class="build-progress-panel">
-          <div class="build-progress-header">
-            <div>
-              <span class="build-title">构建进度</span>
-              <a-tag v-if="buildStatus" :color="getBuildStatusColor(buildStatus)">
-                {{ formatBuildStatus(buildStatus) }}
-              </a-tag>
-            </div>
-            <span v-if="buildTaskId" class="build-task-id">#{{ buildTaskId }}</span>
-          </div>
-          <div v-if="buildError" class="build-error">{{ buildError }}</div>
-          <a-collapse v-if="buildLogs.length > 0" size="small" ghost>
-            <a-collapse-panel key="logs" :header="`构建日志 (${buildLogs.length})`">
-              <div class="build-log-list">
-                <div v-for="log in buildLogs" :key="log.id" class="build-log-line">
-                  <span class="build-log-type">{{ formatBuildLogType(log.logType) }}</span>
-                  <span class="build-log-content">{{ log.content }}</span>
+        <div v-if="hasWorkbenchPanels" class="workbench-panels">
+          <a-collapse
+            v-model:activeKey="activeWorkbenchKeys"
+            class="workbench-collapse"
+            size="small"
+            ghost
+          >
+            <a-collapse-panel v-if="agentTimeline.length > 0" key="agent">
+              <template #header>
+                <div class="workbench-panel-title">
+                  <span>智能体执行时间线</span>
+                  <a-tag v-if="currentAgentStatus" color="processing">
+                    {{ formatAgentStatus(currentAgentStatus) }}
+                  </a-tag>
+                </div>
+              </template>
+              <div class="agent-timeline">
+                <div class="agent-timeline-list">
+                  <div
+                    v-for="item in agentTimeline"
+                    :key="item.id"
+                    class="agent-timeline-item"
+                    :class="`agent-${item.kind}`"
+                  >
+                    <div class="agent-timeline-main">
+                      <span class="agent-timeline-kind">{{ formatAgentKind(item.kind) }}</span>
+                      <span class="agent-timeline-title">{{ formatAgentTitle(item.title) }}</span>
+                      <span class="agent-timeline-time">{{ item.time }}</span>
+                    </div>
+                    <div v-if="item.detail && item.kind !== 'diff'" class="agent-timeline-detail">
+                      {{ item.detail }}
+                    </div>
+                    <a-collapse v-if="item.kind === 'diff' && item.detail" size="small" ghost>
+                      <a-collapse-panel key="diff" :header="item.title">
+                        <pre class="agent-diff-content">{{ item.detail }}</pre>
+                      </a-collapse-panel>
+                    </a-collapse>
+                  </div>
                 </div>
               </div>
+            </a-collapse-panel>
+
+            <a-collapse-panel v-if="buildTaskId || buildStatus" key="build">
+              <template #header>
+                <div class="workbench-panel-title">
+                  <span>构建进度</span>
+                  <a-tag v-if="buildStatus" :color="getBuildStatusColor(buildStatus)">
+                    {{ formatBuildStatus(buildStatus) }}
+                  </a-tag>
+                  <span v-if="buildTaskId" class="build-task-id">#{{ buildTaskId }}</span>
+                </div>
+              </template>
+              <div class="build-progress-panel">
+                <div v-if="buildError" class="build-error">{{ buildError }}</div>
+                <a-collapse v-if="buildLogs.length > 0" size="small" ghost>
+                  <a-collapse-panel key="logs" :header="`构建日志 (${buildLogs.length})`">
+                    <div class="build-log-list">
+                      <div v-for="log in buildLogs" :key="log.id" class="build-log-line">
+                        <span class="build-log-type">{{ formatBuildLogType(log.logType) }}</span>
+                        <span class="build-log-content">{{ log.content }}</span>
+                      </div>
+                    </div>
+                  </a-collapse-panel>
+                </a-collapse>
+                <a-empty v-else description="暂无构建日志" :image="false" />
+              </div>
+            </a-collapse-panel>
+
+            <a-collapse-panel v-if="qualityTask || qualityReport" key="quality">
+              <template #header>
+                <div class="workbench-panel-title">
+                  <span>质量检查</span>
+                  <a-tag v-if="qualityTask?.status" :color="getQualityStatusColor(qualityTask.status)">
+                    {{ formatQualityStatus(qualityTask.status) }}
+                  </a-tag>
+                  <span v-if="qualityTask?.score !== undefined && qualityTask?.score !== null" class="panel-meta">
+                    评分 {{ qualityTask.score }}
+                  </span>
+                </div>
+              </template>
+              <QualityReportPanel
+                :task="qualityTask"
+                :report="qualityReport"
+                :violations="qualityViolations"
+                :attempts="selfHealingAttempts"
+                :checking="qualityChecking"
+                :repairing="qualityRepairing"
+                :applying="qualityRepairApplying"
+                @check="runQualityCheck"
+                @repair="createQualityRepair"
+                @apply="applyQualityRepair"
+              />
+            </a-collapse-panel>
+
+            <a-collapse-panel v-if="selectedElementInfo" key="selected">
+              <template #header>
+                <div class="workbench-panel-title">
+                  <span>选中元素</span>
+                  <code class="panel-code">{{ selectedElementInfo.tagName.toLowerCase() }}</code>
+                </div>
+              </template>
+              <a-alert
+                class="selected-element-alert"
+                type="info"
+                closable
+                @close="clearSelectedElement"
+              >
+                <template #message>
+                  <div class="selected-element-info">
+                    <div class="element-header">
+                      <span class="element-tag">
+                        选中元素：{{ selectedElementInfo.tagName.toLowerCase() }}
+                      </span>
+                      <span v-if="selectedElementInfo.id" class="element-id">
+                        #{{ selectedElementInfo.id }}
+                      </span>
+                      <span v-if="selectedElementInfo.className" class="element-class">
+                        .{{ selectedElementInfo.className.split(' ').join('.') }}
+                      </span>
+                    </div>
+                    <div class="element-details">
+                      <div v-if="selectedElementInfo.textContent" class="element-item">
+                        内容: {{ selectedElementInfo.textContent.substring(0, 50) }}
+                        {{ selectedElementInfo.textContent.length > 50 ? '...' : '' }}
+                      </div>
+                      <div v-if="selectedElementInfo.pagePath" class="element-item">
+                        页面路径: {{ selectedElementInfo.pagePath }}
+                      </div>
+                      <div class="element-item">
+                        选择器:
+                        <code class="element-selector-code">{{ selectedElementInfo.selector }}</code>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </a-alert>
+            </a-collapse-panel>
+
+            <a-collapse-panel v-if="selectedElementInfo" key="visual">
+              <template #header>
+                <div class="workbench-panel-title">
+                  <span>可视化补丁</span>
+                  <a-tag color="blue">编辑中</a-tag>
+                </div>
+              </template>
+              <VisualEditPanel
+                :element="selectedElementInfo"
+                :patch="visualPatch"
+                :previewing="visualPatchPreviewing"
+                :applying="visualPatchApplying"
+                @preview="previewVisualPatch"
+                @apply="applyVisualPatch"
+                @close="clearSelectedElement"
+              />
             </a-collapse-panel>
           </a-collapse>
         </div>
 
-        <QualityReportPanel
-          v-if="qualityTask || qualityReport"
-          :task="qualityTask"
-          :report="qualityReport"
-          :violations="qualityViolations"
-          :attempts="selfHealingAttempts"
-          :checking="qualityChecking"
-          :repairing="qualityRepairing"
-          :applying="qualityRepairApplying"
-          @check="runQualityCheck"
-          @repair="createQualityRepair"
-          @apply="applyQualityRepair"
-        />
-
-        <a-alert
-          v-if="selectedElementInfo"
-          class="selected-element-alert"
-          type="info"
-          closable
-          @close="clearSelectedElement"
-        >
-          <template #message>
-            <div class="selected-element-info">
-              <div class="element-header">
-                <span class="element-tag">
-                  选中元素：{{ selectedElementInfo.tagName.toLowerCase() }}
-                </span>
-                <span v-if="selectedElementInfo.id" class="element-id">
-                  #{{ selectedElementInfo.id }}
-                </span>
-                <span v-if="selectedElementInfo.className" class="element-class">
-                  .{{ selectedElementInfo.className.split(' ').join('.') }}
-                </span>
-              </div>
-              <div class="element-details">
-                <div v-if="selectedElementInfo.textContent" class="element-item">
-                  内容: {{ selectedElementInfo.textContent.substring(0, 50) }}
-                  {{ selectedElementInfo.textContent.length > 50 ? '...' : '' }}
-                </div>
-                <div v-if="selectedElementInfo.pagePath" class="element-item">
-                  页面路径: {{ selectedElementInfo.pagePath }}
-                </div>
-                <div class="element-item">
-                  选择器:
-                  <code class="element-selector-code">{{ selectedElementInfo.selector }}</code>
-                </div>
-              </div>
-            </div>
-          </template>
-        </a-alert>
-
-        <VisualEditPanel
-          v-if="selectedElementInfo"
-          :element="selectedElementInfo"
-          :patch="visualPatch"
-          :previewing="visualPatchPreviewing"
-          :applying="visualPatchApplying"
-          @preview="previewVisualPatch"
-          @apply="applyVisualPatch"
-          @close="clearSelectedElement"
-        />
-
         <!-- 用户消息输入框 -->
         <div class="input-container">
+          <div class="multimodal-chat-upload">
+            <ImagePromptUploader
+              v-model:image="referenceImage"
+              :app-id="appId"
+              :disabled="isGenerating || !isOwner"
+            />
+            <span class="multimodal-chat-hint">可选上传参考图，本轮对话会先生成视觉布局计划</span>
+          </div>
           <div class="input-wrapper">
             <a-tooltip v-if="!isOwner" title="无法在别人的作品下对话哦~" placement="top">
               <a-textarea
@@ -362,7 +411,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onUnmounted, computed } from 'vue'
+import { ref, onMounted, nextTick, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
@@ -395,6 +444,7 @@ import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import VisualEditPanel from '@/components/visual-edit/VisualEditPanel.vue'
 import QualityReportPanel from '@/components/quality/QualityReportPanel.vue'
+import ImagePromptUploader from '@/components/multimodal/ImagePromptUploader.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
 import { API_BASE_URL, getSandboxPreviewUrl, getStaticPreviewUrl } from '@/config/env'
 import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
@@ -433,7 +483,7 @@ const isGenerating = ref(false)
 const messagesContainer = ref<HTMLElement>()
 const activeEventSource = ref<EventSource | null>(null)
 
-type AgentTimelineKind = 'status' | 'tool' | 'diff' | 'error' | 'done'
+type AgentTimelineKind = 'status' | 'tool' | 'vision' | 'layout' | 'diff' | 'error' | 'done'
 
 interface AgentTimelineItem {
   id: string
@@ -453,6 +503,8 @@ interface AgentStreamEvent {
 
 const agentTimeline = ref<AgentTimelineItem[]>([])
 const currentAgentStatus = ref('')
+const referenceImage = ref<API.ReferenceImageUploadVO>()
+const activeWorkbenchKeys = ref<string[]>([])
 
 // 对话历史相关
 const loadingHistory = ref(false)
@@ -515,6 +567,46 @@ const isOwner = computed(() => {
 const isAdmin = computed(() => {
   return loginUserStore.loginUser.userRole === 'admin'
 })
+
+const hasWorkbenchPanels = computed(() => {
+  return (
+    agentTimeline.value.length > 0 ||
+    Boolean(buildTaskId.value || buildStatus.value) ||
+    Boolean(qualityTask.value || qualityReport.value) ||
+    Boolean(selectedElementInfo.value)
+  )
+})
+
+const openWorkbenchPanel = (key: string) => {
+  activeWorkbenchKeys.value = [key]
+}
+
+watch(
+  () => selectedElementInfo.value,
+  (element) => {
+    if (element) {
+      openWorkbenchPanel('visual')
+    }
+  },
+)
+
+watch(
+  () => qualityTask.value?.id,
+  (taskId) => {
+    if (taskId) {
+      openWorkbenchPanel('quality')
+    }
+  },
+)
+
+watch(
+  () => agentTimeline.value.length,
+  (length) => {
+    if (length > 0 && isGenerating.value) {
+      openWorkbenchPanel('agent')
+    }
+  },
+)
 
 // 应用详情相关
 const appDetailVisible = ref(false)
@@ -588,6 +680,14 @@ const fetchAppInfo = async () => {
   }
 
   appId.value = id
+  const routeImageId = route.query.imageId as string | undefined
+  if (routeImageId && !referenceImage.value) {
+    referenceImage.value = {
+      imageId: routeImageId,
+      originalName: '创建参考图',
+      previewUrl: `/api/app/multimodal/image/${routeImageId}`,
+    }
+  }
 
   try {
     const res = await getAppVoById({ id: id as unknown as number })
@@ -746,6 +846,9 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
       clientRequestId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       enableDiff: 'true',
     })
+    if (referenceImage.value?.imageId) {
+      params.set('imageId', referenceImage.value.imageId)
+    }
 
     const url = `${baseURL}/app/chat/gen/code/v2?${params}`
     eventSource = new EventSource(url, { withCredentials: true })
@@ -764,6 +867,22 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
       const data = parseAgentEvent(event)
       const payload = data?.payload || {}
       addAgentTimelineItem('tool', `${payload.toolName || 'tool'} ${payload.status || ''}`.trim(), payload.summary)
+    })
+
+    eventSource.addEventListener('vision_analysis', (event: MessageEvent) => {
+      const data = parseAgentEvent(event)
+      const payload = data?.payload || {}
+      addAgentTimelineItem('vision', payload.stage || 'vision_analysis', payload.message)
+    })
+
+    eventSource.addEventListener('layout_plan', (event: MessageEvent) => {
+      const data = parseAgentEvent(event)
+      const payload = data?.payload || {}
+      addAgentTimelineItem(
+        'layout',
+        'layout_plan',
+        payload.fallback ? '已使用视觉兜底计划' : '视觉布局计划已生成',
+      )
     })
 
     eventSource.addEventListener('file_diff', (event: MessageEvent) => {
@@ -1103,6 +1222,28 @@ const formatSandboxStatus = (status?: string) => {
   return status ? statusMap[status] || status : ''
 }
 
+const getQualityStatusColor = (status?: string) => {
+  const colorMap: Record<string, string> = {
+    QUEUED: 'blue',
+    RUNNING: 'processing',
+    SUCCESS: 'success',
+    FAILED: 'error',
+    REPAIRABLE: 'warning',
+  }
+  return status ? colorMap[status] || 'default' : 'default'
+}
+
+const formatQualityStatus = (status?: string) => {
+  const statusMap: Record<string, string> = {
+    QUEUED: '排队中',
+    RUNNING: '检查中',
+    SUCCESS: '通过',
+    FAILED: '失败',
+    REPAIRABLE: '可修复',
+  }
+  return status ? statusMap[status] || status : ''
+}
+
 const formatVersionType = (type?: string) => {
   const typeMap: Record<string, string> = {
     AI_GENERATION: 'AI 生成',
@@ -1115,6 +1256,8 @@ const formatAgentKind = (kind: AgentTimelineKind) => {
   const kindMap: Record<AgentTimelineKind, string> = {
     status: '状态',
     tool: '工具',
+    vision: '视觉',
+    layout: '布局',
     diff: '差异',
     error: '错误',
     done: '完成',
@@ -1127,6 +1270,9 @@ const formatAgentStatus = (status?: string) => {
     preparing: '准备请求',
     'saving-user-message': '保存用户消息',
     generating: 'AI 生成中',
+    analyzing_reference_image: '分析参考图',
+    vision_analysis: '视觉分析',
+    generating_vue_from_layout: '按布局生成',
     'building-preview': '构建预览',
     'saving-history': '保存对话历史',
     'refreshing-preview': '刷新预览',
@@ -1142,6 +1288,8 @@ const formatAgentTitle = (title?: string) => {
     completed: '执行完成',
     'system error': '系统错误',
     'business error': '业务错误',
+    vision_analysis: '视觉分析完成',
+    layout_plan: '布局计划完成',
   }
   if (!title) return ''
   let formatted = titleMap[title] || title
@@ -1733,6 +1881,7 @@ onUnmounted(() => {
 /* 左侧对话区域 */
 .chat-section {
   flex: 2;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: white;
@@ -1742,7 +1891,8 @@ onUnmounted(() => {
 }
 
 .messages-container {
-  flex: 0.9;
+  flex: 1 1 auto;
+  min-height: 180px;
   padding: 16px;
   overflow-y: auto;
   scroll-behavior: smooth;
@@ -1813,23 +1963,63 @@ onUnmounted(() => {
   margin-bottom: 16px;
 }
 
-.agent-timeline {
-  flex: 0 0 190px;
-  margin: 0 16px 8px;
-  padding: 10px 12px;
+.workbench-panels {
+  flex: 0 0 auto;
+  max-height: 38vh;
+  margin: 0 16px 10px;
+  overflow: auto;
   border: 1px solid #e8e8e8;
   border-radius: 8px;
-  overflow-y: auto;
   background: #ffffff;
 }
 
-.agent-timeline-header {
+.workbench-collapse {
+  background: transparent;
+}
+
+.workbench-collapse :deep(.ant-collapse-item) {
+  border-bottom-color: #f0f0f0;
+}
+
+.workbench-collapse :deep(.ant-collapse-item:last-child) {
+  border-bottom: 0;
+}
+
+.workbench-collapse :deep(.ant-collapse-header) {
+  align-items: center;
+  padding: 10px 12px !important;
+}
+
+.workbench-collapse :deep(.ant-collapse-content-box) {
+  padding: 0 12px 12px !important;
+}
+
+.workbench-panel-title {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 8px;
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
+}
+
+.panel-meta,
+.panel-code {
+  color: #8c8c8c;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.panel-code {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-timeline {
+  max-height: 240px;
+  overflow-y: auto;
 }
 
 .agent-timeline-list {
@@ -1851,6 +2041,14 @@ onUnmounted(() => {
 
 .agent-tool {
   border-left-color: #13c2c2;
+}
+
+.agent-vision {
+  border-left-color: #faad14;
+}
+
+.agent-layout {
+  border-left-color: #2f54eb;
 }
 
 .agent-diff {
@@ -1916,6 +2114,19 @@ onUnmounted(() => {
   background: white;
 }
 
+.multimodal-chat-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.multimodal-chat-hint {
+  color: #64748b;
+  font-size: 12px;
+}
+
 .input-wrapper {
   position: relative;
 }
@@ -1933,6 +2144,7 @@ onUnmounted(() => {
 /* 右侧预览区域 */
 .preview-section {
   flex: 3;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: white;
@@ -2006,11 +2218,7 @@ onUnmounted(() => {
 }
 
 .build-progress-panel {
-  margin: 0 16px 12px;
-  padding: 12px;
-  border: 1px solid #e8e8e8;
-  border-radius: 8px;
-  background: #fff;
+  min-height: 48px;
 }
 
 .build-progress-header {
@@ -2036,7 +2244,7 @@ onUnmounted(() => {
 }
 
 .build-log-list {
-  max-height: 220px;
+  max-height: 200px;
   overflow: auto;
   font-family: 'Monaco', 'Menlo', monospace;
   font-size: 12px;
@@ -2060,7 +2268,26 @@ onUnmounted(() => {
 }
 
 .selected-element-alert {
-  margin: 0 16px;
+  margin: 0;
+}
+
+.workbench-panels :deep(.quality-panel),
+.workbench-panels :deep(.visual-edit-panel) {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.workbench-panels :deep(.visual-edit-panel) {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.workbench-panels :deep(.quality-diff),
+.workbench-panels :deep(.quality-log),
+.workbench-panels :deep(.diff-preview) {
+  max-height: 180px;
 }
 
 /* 响应式设计 */

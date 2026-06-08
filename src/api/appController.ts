@@ -14,6 +14,48 @@ export async function addApp(body: API.AppAddRequest, options?: { [key: string]:
   })
 }
 
+export async function uploadMultimodalImage(
+  file: File,
+  appId?: number | string,
+  options?: { [key: string]: any }
+) {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (appId) {
+    formData.append('appId', String(appId))
+  }
+  return request<API.BaseResponseReferenceImageUploadVO>('/app/multimodal/upload-image', {
+    method: 'POST',
+    data: formData,
+    ...(options || {}),
+  })
+}
+
+export async function createMultimodalApp(
+  body: API.CreateAppWithImageRequest,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseLong>('/app/multimodal/create', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    data: body,
+    ...(options || {}),
+  })
+}
+
+export async function analyzeMultimodalImage(
+  params: API.analyzeMultimodalImageParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseVisionAnalysisResult>('/app/multimodal/analyze', {
+    method: 'POST',
+    params: { ...params },
+    ...(options || {}),
+  })
+}
+
 /** 此处后端没有提供注释 POST /app/admin/delete */
 export async function deleteAppByAdmin(body: API.DeleteRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/app/admin/delete', {

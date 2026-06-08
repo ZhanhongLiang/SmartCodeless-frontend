@@ -1,4 +1,70 @@
 declare namespace API {
+  type ReferenceImageUploadVO = {
+    imageId?: string
+    originalName?: string
+    mimeType?: string
+    fileSize?: number
+    width?: number
+    height?: number
+    previewUrl?: string
+  }
+
+  type CreateAppWithImageRequest = {
+    initPrompt?: string
+    imageId?: string
+  }
+
+  type UiThemePlan = {
+    primaryColor?: string
+    backgroundColor?: string
+    textColor?: string
+    styleKeywords?: string[]
+  }
+
+  type UiComponentNode = {
+    type?: string
+    name?: string
+    text?: string[]
+    position?: string
+    styleHints?: string[]
+  }
+
+  type UiLayoutPlan = {
+    pageType?: string
+    language?: string
+    theme?: UiThemePlan
+    layout?: Record<string, any>
+    components?: UiComponentNode[]
+    assets?: Record<string, any>[]
+    confidence?: number
+    warnings?: string[]
+  }
+
+  type VisionAnalysisResult = {
+    imageId?: string
+    layoutPlan?: UiLayoutPlan
+    rawJson?: string
+    fallback?: boolean
+    summary?: string
+  }
+
+  type BaseResponseReferenceImageUploadVO = {
+    code?: number
+    data?: ReferenceImageUploadVO
+    message?: string
+  }
+
+  type BaseResponseVisionAnalysisResult = {
+    code?: number
+    data?: VisionAnalysisResult
+    message?: string
+  }
+
+  type analyzeMultimodalImageParams = {
+    imageId: string
+    prompt?: string
+  }
+
   type AppAddRequest = {
     initPrompt?: string
   }

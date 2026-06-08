@@ -3,9 +3,15 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
-import { addApp, listMyAppVoByPage, listGoodAppVoByPage } from '@/api/appController'
+import {
+  addApp,
+  createMultimodalApp,
+  listMyAppVoByPage,
+  listGoodAppVoByPage,
+} from '@/api/appController'
 import { getDeployUrl } from '@/config/env'
 import AppCard from '@/components/AppCard.vue'
+import ImagePromptUploader from '@/components/multimodal/ImagePromptUploader.vue'
 
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
@@ -13,6 +19,7 @@ const loginUserStore = useLoginUserStore()
 // 用户提示词
 const userPrompt = ref('')
 const creating = ref(false)
+const referenceImage = ref<API.ReferenceImageUploadVO>()
 
 // 我的应用数据
 const myApps = ref<API.AppVO[]>([])
@@ -52,15 +59,22 @@ const createApp = async () => {
 
   creating.value = true
   try {
-    const res = await addApp({
+    const payload = {
       initPrompt: userPrompt.value.trim(),
-    })
+      imageId: referenceImage.value?.imageId,
+    }
+    const res = referenceImage.value?.imageId
+      ? await createMultimodalApp(payload)
+      : await addApp({ initPrompt: payload.initPrompt })
 
     if (res.data.code === 0 && res.data.data) {
       message.success('应用创建成功')
       // 跳转到对话页面，确保ID是字符串类型
       const appId = String(res.data.data)
-      await router.push(`/app/chat/${appId}`)
+      await router.push({
+        path: `/app/chat/${appId}`,
+        query: payload.imageId ? { imageId: payload.imageId } : undefined,
+      })
     } else {
       message.error('创建失败：' + res.data.message)
     }
@@ -177,6 +191,10 @@ onMounted(async () => {
           :maxlength="1000"
           class="prompt-input"
         />
+        <div class="multimodal-home-upload">
+          <ImagePromptUploader v-model:image="referenceImage" :disabled="creating" />
+          <span class="multimodal-home-hint">可选上传截图、草图或参考图，先由 Qwen-VL 分析页面布局</span>
+        </div>
         <div class="input-actions">
           <a-button type="primary" size="large" @click="createApp" :loading="creating">
             <template #icon>
@@ -475,6 +493,20 @@ onMounted(async () => {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.multimodal-home-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 0 4px;
+}
+
+.multimodal-home-hint {
+  color: #64748b;
+  font-size: 13px;
 }
 
 /* 快捷按钮 */
